@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# Copyright (c) 2015 Sascha Spreitzer
+# MIT License
+
+# Create 20 byte otp secret
+genotpkey() {
+	if [ ! -f ~/.otp ]; then
+		openssl rand 20 > ~/.otp
+	fi
+}
+
+# Dump otp secret in hex
+otphex() {
+	genotpkey
+	python2 -c "import os; print open(os.environ['HOME']+'/.otp').read().encode('hex')"
+}
+
+# Dump otp secret in base32
+otpbase32() {
+	genotpkey
+	python2 -c "import base64; import os; print base64.b32encode(open(os.environ['HOME']+'/.otp').read())"
+}
+
+# Get otp from key
+getotp() {
+	genotpkey
+	oathtool $* $(otphex)
+}
+
+# Send otp to gui window with enter
+sendotp() {
+	xdotool key --window=$(xdotool getactivewindow) $( echo $1 | fold -w1 ) Return
+}
+
+# Show 2d encoded ansi qr from secret
+qr() {
+	if [ "$1" == "--totp" ]; then
+		type="totp"
+	else
+		type="hotp"
+	fi
+	key32=$(otpbase32)
+	keyhex=$(otphex)
+	qrencode -t ansi "otpauth://${type}/${LOGNAME}@${HOSTNAME}?secret=${key32}"
+	echo "otpauth://${type}/${LOGNAME}@${HOSTNAME}?secret=${key32}"
+	echo "secret key: ${keyhex}"
+}
+
+# Main handle
+main() {
+	while getopts qt opt; do
+		case "${opt}" in
+			t)
+				cmdopts=--totp
+				;;
+			q)
+				qr $cmdopts
+				exit
+				;;
+		esac
+	done
+	sendotp $(getotp $cmdopts)
+}
+
+# Run if not sourced
+if [ $(basename $0) == "otpshot" ]; then
+	main $*
+fi
+
